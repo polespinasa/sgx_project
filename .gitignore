@@ -1,0 +1,66 @@
+# Prerequisites
+*.d
+
+# Compiled Object files
+*.slo
+*.lo
+*.o
+*.obj
+
+# Precompiled Headers
+*.gch
+*.pch
+
+# Compiled Dynamic libraries
+*.so
+*.dylib
+*.dll
+
+# Fortran module files
+*.mod
+*.smod
+
+# Compiled Static libraries
+*.lai
+*.la
+*.a
+*.lib
+
+# Executables
+*.exe
+*.out
+*.app
+
+# SGX Generated files (Edger8r output)
+*_u.c
+*_u.h
+*_t.c
+*_t.h
+
+# Build directories
+[Bb]uild/
+[Bb]uild-*/
+[Oo]ut/
+cmake-build-*/
+
+# CMake generated files
+CMakeCache.txt
+CMakeFiles/
+CMakeScripts/
+cmake_install.cmake
+install_manifest.txt
+compile_commands.json
+CTestTestfile.cmake
+_deps/
+*.cmake
+
+# Makefile
+Makefile
+
+# IDE specific files (optional)
+.vscode/
+.idea/
+*.swp
+*.user
+
+Settings.toml

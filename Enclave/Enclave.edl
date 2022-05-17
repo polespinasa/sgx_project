@@ -1,0 +1,26 @@
+enclave {
+    trusted {
+        public int trusted_func01(void);
+
+        /* Generate new X25519 keypair and return sealed data */
+        public sgx_status_t enclave_generate_new_keypair(
+            [out, size=sealed_buf_size] uint8_t *sealed_keypair,
+            size_t sealed_buf_size,
+            [out] size_t *actual_sealed_size
+        );
+
+        /* Unseal previously sealed keypair */
+        public sgx_status_t enclave_unseal_keypair(
+            [in, size=sealed_size] uint8_t *sealed_data,
+            size_t sealed_size,
+            [out, size=32] uint8_t *privkey,
+            [out, size=32] uint8_t *pubkey
+        );
+    };
+
+    untrusted {
+        void ocall_wait_keyinput([in, string] const char *str);
+        void ocall_print_string([in, string] const char *str);
+    };
+
+};
