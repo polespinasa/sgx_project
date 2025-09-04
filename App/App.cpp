@@ -12,6 +12,7 @@
 #include "Enclave_u.h"
 
 #include "controllers/server_key.h"
+#include "controllers/server_management.h"
 
 // for key_to_string - delete later
 #include <cstddef>
@@ -107,6 +108,8 @@ int SGX_CDECL main(int argc, char *argv[])
 
     printf ("X (untrusted): %d\n", untrusted_x);
     printf ("X (trusted): %d\n", returned_result);
+
+    server_management::start_server();
 
     return 0;
 }

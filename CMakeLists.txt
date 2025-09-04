@@ -148,16 +148,21 @@ add_custom_command(
             --search-path ${SGX_SDK}/include
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/App
     DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/Enclave/Enclave.edl
-    BYPRODUCTS ${CMAKE_CURRENT_SOURCE_DIR}/App/Enclave_u.h
-               ${CMAKE_CURRENT_SOURCE_DIR}/App/Enclave_u.c
     COMMENT "Generating untrusted proxy files (Enclave_u.*)"
     VERBATIM
+)
+
+# Create a custom target for untrusted EDL generation
+add_custom_target(untrusted_edl_generation
+    DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/App/Enclave_u.h
+            ${CMAKE_CURRENT_SOURCE_DIR}/App/Enclave_u.c
 )
 
 # OBJECT lib for untrusted stubs (lets us target-scope includes/flags)
 add_library(app_generated_objs OBJECT
     ${CMAKE_CURRENT_SOURCE_DIR}/App/Enclave_u.c
 )
+add_dependencies(app_generated_objs untrusted_edl_generation)
 target_include_directories(app_generated_objs PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/App
     ${SGX_SDK}/include
@@ -170,9 +175,11 @@ target_compile_options(app_generated_objs PRIVATE
 add_executable(${APP_NAME}
     ${CMAKE_CURRENT_SOURCE_DIR}/App/App.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/App/controllers/server_key.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/App/controllers/server_management.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/App/controllers/utilities.cpp
     $<TARGET_OBJECTS:app_generated_objs>
 )
+add_dependencies(${APP_NAME} untrusted_edl_generation)
 target_include_directories(${APP_NAME} PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/App
     ${CMAKE_CURRENT_SOURCE_DIR}/App/controllers
@@ -206,6 +213,11 @@ endif()
 # (Optional) vcpkg packages for host app only
 if(ENABLE_VCPKG_HOST)
     # Example (commented): fmt + mbedtls
+    find_package(Crow CONFIG QUIET)
+    if(Crow_FOUND)
+        target_link_libraries(${APP_NAME} PRIVATE Crow::Crow)
+        target_compile_definitions(${APP_NAME} PRIVATE HAVE_CROW=1)
+    endif()
     # find_package(fmt CONFIG QUIET)
     # if(fmt_FOUND)
     #     target_link_libraries(${APP_NAME} PRIVATE fmt::fmt)
@@ -255,16 +267,21 @@ add_custom_command(
             --search-path ${SGX_SDK}/include
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/Enclave
     DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/Enclave/Enclave.edl
-    BYPRODUCTS ${CMAKE_CURRENT_SOURCE_DIR}/Enclave/Enclave_t.h
-               ${CMAKE_CURRENT_SOURCE_DIR}/Enclave/Enclave_t.c
     COMMENT "Generating trusted proxy files (Enclave_t.*)"
     VERBATIM
+)
+
+# Create a custom target for trusted EDL generation
+add_custom_target(trusted_edl_generation
+    DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/Enclave/Enclave_t.h
+            ${CMAKE_CURRENT_SOURCE_DIR}/Enclave/Enclave_t.c
 )
 
 # OBJECT libraries (trusted stubs, core, third-party)
 add_library(enclave_trusted_objs OBJECT
     ${CMAKE_CURRENT_SOURCE_DIR}/Enclave/Enclave_t.c
 )
+add_dependencies(enclave_trusted_objs trusted_edl_generation)
 target_include_directories(enclave_trusted_objs PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/Enclave
     ${CMAKE_CURRENT_SOURCE_DIR}/Enclave/libraries
@@ -278,6 +295,7 @@ target_compile_options(enclave_trusted_objs PRIVATE
 add_library(enclave_core_objs OBJECT
     ${CMAKE_CURRENT_SOURCE_DIR}/Enclave/Enclave.cpp
 )
+add_dependencies(enclave_core_objs trusted_edl_generation)
 target_include_directories(enclave_core_objs PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/Enclave
     ${CMAKE_CURRENT_SOURCE_DIR}/Enclave/libraries

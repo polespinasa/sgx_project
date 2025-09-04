@@ -64,3 +64,4 @@ Makefile
 *.user
 
 Settings.toml
+CMakeUserPresets.json
