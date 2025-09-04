@@ -21,4 +21,4 @@ namespace server_key {
     std::vector<uint8_t> readVectorFromFile(const std::string& filename);
 }
 
-#endif // ENDPOINT_DEPOSIT_H
+#endif // SERVER_KEY_H

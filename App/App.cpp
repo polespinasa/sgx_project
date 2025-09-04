@@ -113,4 +113,3 @@ int SGX_CDECL main(int argc, char *argv[])
 
     return 0;
 }
-
