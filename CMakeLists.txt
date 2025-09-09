@@ -123,6 +123,27 @@ endif()
 set(UKEYEX_LIB_NAME "sgx_ukey_exchange")          # untrusted key-exchange (no _sim variant)
 set(CRYPTO_LIB_NAME "sgx_tcrypto")                # trusted crypto
 
+# ------------------------- libbitcoin kernel -----------------------------
+
+# Where your Bitcoin source and build live
+set(BITCOIN_SRC   "/home/ubuntu/bitcoin"        CACHE PATH "Bitcoin Core source tree")
+set(BITCOIN_BUILD "/home/ubuntu/bitcoin/build"  CACHE PATH "Bitcoin Core build tree (has lib/)")
+add_executable(SGXProject App/App.cpp)
+
+# Header lives in src/kernel/bitcoinkernel.h (C API)
+target_include_directories(SGXProject PRIVATE
+   "${BITCOIN_SRC}/src/kernel")
+
+# Link the library directly from the build tree
+find_library(BITCOINKERNEL_LIB NAMES bitcoinkernel
+  HINTS "${BITCOIN_BUILD}/lib" NO_DEFAULT_PATH REQUIRED)
+
+target_link_libraries(SGXProject PRIVATE "${BITCOINKERNEL_LIB}")
+set_target_properties(SGXProject PROPERTIES
+  BUILD_RPATH "${BITCOIN_BUILD}/lib"
+  INSTALL_RPATH "${BITCOIN_BUILD}/lib")
+# -------------------------------------------------------------------------
+
 # Output names
 set(APP_NAME "app")
 set(ENCLAVE_NAME "enclave.so")

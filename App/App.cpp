@@ -21,6 +21,8 @@
 #include <vector>
 #include <iomanip>
 
+#include "bitcoinkernel.h"
+
 sgx_enclave_id_t global_eid = 0;
 
 /* ocall functions (untrusted) */
