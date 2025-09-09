@@ -2,6 +2,7 @@
 #include <stdexcept>
 #include <stdio.h>
 #include <string.h>
+#include <array>
 
 # include <unistd.h>
 # include <pwd.h>
