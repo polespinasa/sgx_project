@@ -1,0 +1,34 @@
+sequenceDiagram
+    participant BitcoinCore
+    participant UntrustedCode
+    participant TrustedCode
+    participant BitcoinP2P as Bitcoin P2P network
+    participant Marketplace
+    participant MiningSoftware
+
+    BitcoinCore->>BitcoinP2P: Retrieve transactions
+    UntrustedCode->>Marketplace: Request Bid
+    Marketplace-->>UntrustedCode: Sealed Bid
+    UntrustedCode->>TrustedCode: Send Sealed Bid (ECALL)
+    TrustedCode->>TrustedCode: Decrypt Sealed Bid
+    TrustedCode->>UntrustedCode: Request UTXO info (OCALL)
+    UntrustedCode->>BitcoinCore: Request UTXO info (RPC gettxout)
+    BitcoinCore-->>UntrustedCode: Return UTXO info
+    UntrustedCode-->>TrustedCode: Return UTXO info
+    TrustedCode->>TrustedCode: Verify transaction
+    alt Transaction is valid
+        TrustedCode->>UntrustedCode: Send txid + metadata (OCALL)
+        UntrustedCode->>BitcoinCore: Request block template (RPC)
+        BitcoinCore-->>UntrustedCode: Return block template
+        UntrustedCode->>UntrustedCode: Modify template header, add new txid
+        UntrustedCode->>MiningSoftware: Provide block header
+        MiningSoftware-->>UntrustedCode: Return mined header
+        UntrustedCode->>TrustedCode: Send valid header
+        TrustedCode->>TrustedCode: Verify PoW
+        alt PoW is correct
+            TrustedCode->>UntrustedCode: Provide unsealed bid
+            UntrustedCode->>UntrustedCode: Modify template, add new unsealed tx
+            UntrustedCode->>BitcoinCore: Give new mined block
+            BitcoinCore->>BitcoinP2P: Broadcast new block
+        end
+    end
