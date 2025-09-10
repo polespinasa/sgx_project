@@ -160,8 +160,8 @@ sgx_status_t ecall_verify_tx_input(const char* tx_hex,
     if (st != SGX_SUCCESS || wrote != spk_len) { free(tx_buf); free(spk_buf); return SGX_ERROR_UNEXPECTED; }
 
     // 2) Build kernel objects
-    btck_Transaction* tx = btck_transaction_create(tx_buf, tx_len);
-    if (!tx) { free(tx_buf); free(spk_buf); return SGX_ERROR_UNEXPECTED; }
+    //btck_Transaction* tx = btck_transaction_create(tx_buf, tx_len);
+    //if (!tx) { free(tx_buf); free(spk_buf); return SGX_ERROR_UNEXPECTED; }
 }
 
 sgx_status_t enclave_seal_data(uint8_t *privkey, size_t privkey_len,
