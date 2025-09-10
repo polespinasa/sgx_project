@@ -11,8 +11,8 @@ option(ENABLE_VCPKG_HOST "Enable vcpkg packages for the untrusted host app" ON)
 # Header: <BITCOIN_SRC>/src/kernel/bitcoinkernel.h
 # Static lib: <BITCOIN_BUILD>/lib/libbitcoinkernel.a   (built with -DBUILD_SHARED_LIBS=OFF, -DCMAKE_POSITION_INDEPENDENT_CODE=ON)
 option(ENABLE_ENCLAVE_BITCOINKERNEL "Link libbitcoinkernel into the enclave" ON)
-set(BITCOIN_SRC   "/home/node/Dev/bitcoin"        CACHE PATH "Bitcoin Core source tree (with src/kernel/bitcoinkernel.h)")
-set(BITCOIN_BUILD "/home/node/Dev/bitcoin/build"  CACHE PATH "Bitcoin Core build tree (has lib/libbitcoinkernel.a)")
+set(BITCOIN_SRC   "/home/ubuntu/bitcoin"        CACHE PATH "Bitcoin Core source tree (with src/kernel/bitcoinkernel.h)")
+set(BITCOIN_BUILD "/home/ubuntu/bitcoin/build"  CACHE PATH "Bitcoin Core build tree (has lib/libbitcoinkernel.a)")
 
 set(ENCLAVE_EXTRA_STATIC_LIBS)
 if(ENABLE_ENCLAVE_BITCOINKERNEL)
