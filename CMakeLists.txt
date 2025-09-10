@@ -8,14 +8,15 @@ option(ENABLE_VCPKG_HOST "Enable vcpkg packages for the untrusted host app" ON)
 
 # ---------------- Bitcoin libbitcoinkernel (enclave-only) ----------------
 # Point these to your Bitcoin Core source and build (PR #30595).
-# The header is at: <BITCOIN_SRC>/src/kernel/bitcoinkernel.h
-# The library is at: <BITCOIN_BUILD>/lib/libbitcoinkernel.{a,so}
+# Header: <BITCOIN_SRC>/src/kernel/bitcoinkernel.h
+# Static lib: <BITCOIN_BUILD>/lib/libbitcoinkernel.a   (built with -DBUILD_SHARED_LIBS=OFF, -DCMAKE_POSITION_INDEPENDENT_CODE=ON)
 option(ENABLE_ENCLAVE_BITCOINKERNEL "Link libbitcoinkernel into the enclave" ON)
 set(BITCOIN_SRC   "/home/node/Dev/bitcoin"        CACHE PATH "Bitcoin Core source tree (with src/kernel/bitcoinkernel.h)")
-set(BITCOIN_BUILD "/home/node/Dev/bitcoin/build"  CACHE PATH "Bitcoin Core build tree (has lib/libbitcoinkernel*)")
+set(BITCOIN_BUILD "/home/node/Dev/bitcoin/build"  CACHE PATH "Bitcoin Core build tree (has lib/libbitcoinkernel.a)")
 
-set(ENCLAVE_EXTRA_LIBS)  # will hold libbitcoinkernel if enabled
+set(ENCLAVE_EXTRA_STATIC_LIBS)
 if(ENABLE_ENCLAVE_BITCOINKERNEL)
+    # Header dir (header is directly in src/kernel)
     find_path(BITCOINKERNEL_INCLUDE
         NAMES bitcoinkernel.h
         HINTS "${BITCOIN_SRC}/src/kernel"
@@ -24,17 +25,23 @@ if(ENABLE_ENCLAVE_BITCOINKERNEL)
         message(FATAL_ERROR "ENABLE_ENCLAVE_BITCOINKERNEL=ON but bitcoinkernel.h not found under ${BITCOIN_SRC}/src/kernel")
     endif()
 
-    find_library(BITCOINKERNEL_LIB
-        NAMES bitcoinkernel
+    # Require the STATIC archive (.a) — do NOT allow the .so in enclave
+    find_file(BITCOINKERNEL_LIB
+        NAMES libbitcoinkernel.a
         HINTS "${BITCOIN_BUILD}/lib"
         NO_DEFAULT_PATH)
     if(NOT BITCOINKERNEL_LIB)
-        message(FATAL_ERROR "ENABLE_ENCLAVE_BITCOINKERNEL=ON but libbitcoinkernel not found in ${BITCOIN_BUILD}/lib")
+        message(FATAL_ERROR "ENABLE_ENCLAVE_BITCOINKERNEL=ON but libbitcoinkernel.a not found in ${BITCOIN_BUILD}/lib")
     endif()
 
-    list(APPEND ENCLAVE_EXTRA_LIBS "${BITCOINKERNEL_LIB}")
+    list(APPEND ENCLAVE_EXTRA_STATIC_LIBS "${BITCOINKERNEL_LIB}")
+
+    # (Optional) If you hit unresolved symbols, locate the static deps and append here, e.g.:
+    # find_file(SECP256K1_LIB NAMES libsecp256k1.a HINTS "${BITCOIN_BUILD}/lib" NO_DEFAULT_PATH)
+    # if(SECP256K1_LIB) list(APPEND ENCLAVE_EXTRA_STATIC_LIBS "${SECP256K1_LIB}") endif()
+
     message(STATUS "bitcoinkernel include: ${BITCOINKERNEL_INCLUDE}")
-    message(STATUS "bitcoinkernel lib:     ${BITCOINKERNEL_LIB}")
+    message(STATUS "bitcoinkernel static:  ${BITCOINKERNEL_LIB}")
 endif()
 
 # ---------------- SGX SDK Settings ----------------
@@ -238,7 +245,7 @@ target_link_libraries(${APP_NAME} PRIVATE
     pthread
 )
 if(SGX_UKEY_EXCHANGE)
-    target_link_libraries(${APP_NAME} PRIVATE ${SGX_UKEY_EXCHANGE})
+  target_link_libraries(${APP_NAME} PRIVATE ${SGX_UKEY_EXCHANGE})
 endif()
 
 # (Optional) vcpkg packages for host app only
@@ -284,9 +291,10 @@ set(ENCLAVE_LINK_FLAGS_LIST
     -Wl,--whole-archive -l${TRTS_LIB_NAME} -Wl,--no-whole-archive
     -Wl,--start-group -lsgx_tstdc -lsgx_tcxx -l${CRYPTO_LIB_NAME} -l${SERVICE_LIB_NAME} -Wl,--end-group
     -Wl,-Bstatic -Wl,-Bsymbolic -Wl,--no-undefined
-    -Wl,-pie,-eenclave_entry -Wl,--export-dynamic -Wl,--defsym,__ImageBase=0
+    -Wl,-pie,-eenclave_entry -Wl,--defsym,__ImageBase=0
     -Wl,--gc-sections
     -Wl,--version-script=${CMAKE_CURRENT_SOURCE_DIR}/Enclave/Enclave.lds
+    # NOTE: avoid -Wl,-s (strip); the signer needs a proper .symtab
 )
 
 # Trusted EDL codegen → Enclave_t.c/h
@@ -360,12 +368,10 @@ add_custom_command(
             $<TARGET_OBJECTS:enclave_trusted_objs>
             $<TARGET_OBJECTS:enclave_core_objs>
             $<TARGET_OBJECTS:enclave_thirdparty_objs>
-            # Optional: libbitcoinkernel (must come after objects)
-            ${ENCLAVE_EXTRA_LIBS}
+            ${ENCLAVE_EXTRA_STATIC_LIBS}
             -o ${CMAKE_CURRENT_BINARY_DIR}/${ENCLAVE_NAME}
             ${ENCLAVE_LINK_FLAGS_LIST}
-    DEPENDS enclave_trusted_objs enclave_core_objs enclave_thirdparty_objs
-    DEPENDS enclave_trusted_objs enclave_core_objs enclave_thirdparty_objs ${ENCLAVE_EXTRA_LIBS}
+    DEPENDS enclave_trusted_objs enclave_core_objs enclave_thirdparty_objs ${ENCLAVE_EXTRA_STATIC_LIBS}
     COMMENT "Linking enclave (${ENCLAVE_NAME})"
     VERBATIM
 )

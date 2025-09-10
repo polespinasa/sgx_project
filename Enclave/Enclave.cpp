@@ -162,54 +162,6 @@ sgx_status_t ecall_verify_tx_input(const char* tx_hex,
     // 2) Build kernel objects
     btck_Transaction* tx = btck_transaction_create(tx_buf, tx_len);
     if (!tx) { free(tx_buf); free(spk_buf); return SGX_ERROR_UNEXPECTED; }
-
-    btck_ScriptPubkey* spk = btck_script_pubkey_create(spk_buf, spk_len);
-    if (!spk) {
-        btck_transaction_destroy(tx);
-        free(tx_buf); free(spk_buf);
-        return SGX_ERROR_UNEXPECTED;
-    }
-
-    // Optional: only needed for Taproot in this example
-    btck_TransactionOutput* out = nullptr;
-    const btck_TransactionOutput* out_ptr = nullptr;
-    uint32_t spent_len = 0;
-    if (flags & btck_ScriptVerificationFlags_TAPROOT) {
-        out = btck_transaction_output_create(spk, amount);
-        if (!out) {
-            btck_script_pubkey_destroy(spk);
-            btck_transaction_destroy(tx);
-            free(tx_buf); free(spk_buf);
-            return SGX_ERROR_UNEXPECTED;
-        }
-        out_ptr = out;
-        spent_len = 1u;
-    }
-
-    // 3) Verify
-    btck_ScriptVerifyStatus status = btck_ScriptVerifyStatus_SCRIPT_VERIFY_OK;
-    int ok = btck_script_pubkey_verify(
-        /*script_pubkey=*/spk,
-        /*amount=*/amount,
-        /*tx_to=*/tx,
-        /*spent_outputs=*/out_ptr ? &out_ptr : nullptr,
-        /*spent_outputs_len=*/spent_len,
-        /*input_index=*/input_index,
-        /*flags=*/flags,
-        /*status=*/&status
-    );
-
-    // 4) Cleanup
-    if (out) btck_transaction_output_destroy(out);
-    btck_script_pubkey_destroy(spk);
-    btck_transaction_destroy(tx);
-    free(tx_buf);
-    free(spk_buf);
-
-    // 5) Return results via out-params
-    *out_ok = ok;
-    *out_status = (unsigned)status;
-    return SGX_SUCCESS;
 }
 
 sgx_status_t enclave_seal_data(uint8_t *privkey, size_t privkey_len,
