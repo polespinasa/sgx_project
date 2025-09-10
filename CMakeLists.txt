@@ -6,6 +6,37 @@ project(SGXProject)
 #   -DCMAKE_TOOLCHAIN_FILE=$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake
 option(ENABLE_VCPKG_HOST "Enable vcpkg packages for the untrusted host app" ON)
 
+# ---------------- Bitcoin libbitcoinkernel (enclave-only) ----------------
+# Point these to your Bitcoin Core source and build (PR #30595).
+# The header is at: <BITCOIN_SRC>/src/kernel/bitcoinkernel.h
+# The library is at: <BITCOIN_BUILD>/lib/libbitcoinkernel.{a,so}
+option(ENABLE_ENCLAVE_BITCOINKERNEL "Link libbitcoinkernel into the enclave" ON)
+set(BITCOIN_SRC   "/home/node/Dev/bitcoin"        CACHE PATH "Bitcoin Core source tree (with src/kernel/bitcoinkernel.h)")
+set(BITCOIN_BUILD "/home/node/Dev/bitcoin/build"  CACHE PATH "Bitcoin Core build tree (has lib/libbitcoinkernel*)")
+
+set(ENCLAVE_EXTRA_LIBS)  # will hold libbitcoinkernel if enabled
+if(ENABLE_ENCLAVE_BITCOINKERNEL)
+    find_path(BITCOINKERNEL_INCLUDE
+        NAMES bitcoinkernel.h
+        HINTS "${BITCOIN_SRC}/src/kernel"
+        NO_DEFAULT_PATH)
+    if(NOT BITCOINKERNEL_INCLUDE)
+        message(FATAL_ERROR "ENABLE_ENCLAVE_BITCOINKERNEL=ON but bitcoinkernel.h not found under ${BITCOIN_SRC}/src/kernel")
+    endif()
+
+    find_library(BITCOINKERNEL_LIB
+        NAMES bitcoinkernel
+        HINTS "${BITCOIN_BUILD}/lib"
+        NO_DEFAULT_PATH)
+    if(NOT BITCOINKERNEL_LIB)
+        message(FATAL_ERROR "ENABLE_ENCLAVE_BITCOINKERNEL=ON but libbitcoinkernel not found in ${BITCOIN_BUILD}/lib")
+    endif()
+
+    list(APPEND ENCLAVE_EXTRA_LIBS "${BITCOINKERNEL_LIB}")
+    message(STATUS "bitcoinkernel include: ${BITCOINKERNEL_INCLUDE}")
+    message(STATUS "bitcoinkernel lib:     ${BITCOINKERNEL_LIB}")
+endif()
+
 # ---------------- SGX SDK Settings ----------------
 if(NOT DEFINED ENV{SGX_SDK})
     set(SGX_SDK "/opt/intel/sgxsdk")
@@ -302,6 +333,7 @@ target_include_directories(enclave_core_objs PRIVATE
     ${SGX_SDK}/include
     ${SGX_SDK}/include/tlibc
     ${SGX_SDK}/include/libcxx
+    $<$<BOOL:${ENABLE_ENCLAVE_BITCOINKERNEL}>:${BITCOINKERNEL_INCLUDE}>
 )
 # Enclave C++ standard = C++11 (explicit, matches sgx_tcxx expectations)
 target_compile_options(enclave_core_objs PRIVATE
@@ -328,9 +360,12 @@ add_custom_command(
             $<TARGET_OBJECTS:enclave_trusted_objs>
             $<TARGET_OBJECTS:enclave_core_objs>
             $<TARGET_OBJECTS:enclave_thirdparty_objs>
+            # Optional: libbitcoinkernel (must come after objects)
+            ${ENCLAVE_EXTRA_LIBS}
             -o ${CMAKE_CURRENT_BINARY_DIR}/${ENCLAVE_NAME}
             ${ENCLAVE_LINK_FLAGS_LIST}
     DEPENDS enclave_trusted_objs enclave_core_objs enclave_thirdparty_objs
+    DEPENDS enclave_trusted_objs enclave_core_objs enclave_thirdparty_objs ${ENCLAVE_EXTRA_LIBS}
     COMMENT "Linking enclave (${ENCLAVE_NAME})"
     VERBATIM
 )

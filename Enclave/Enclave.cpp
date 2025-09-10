@@ -1,11 +1,16 @@
 #include "Enclave_t.h"
 #include <stdio.h>
 #include <string.h>
+#include <stddef.h>
+#include <stdint.h>
 
 #include "libraries/monocypher.h"
 
+#include "sgx_error.h"
 #include "sgx_trts.h"
 #include "sgx_tseal.h"
+
+#include "bitcoinkernel.h"
 
 int trusted_func01()
 {
@@ -26,6 +31,185 @@ char* data_to_hex(uint8_t* in, size_t insz)
   }
   pout[0] = 0;
   return out;
+}
+
+// Treat ASCII spaces/newlines/tabs as ignorable; no locale/ctype.
+static inline bool is_space_ascii(char c) {
+    return c == ' ' || c == '\n' || c == '\r' || c == '\t' || c == '\f' || c == '\v';
+}
+
+static inline int hex_nibble(char c) {
+    if (c >= '0' && c <= '9') return c - '0';
+    if (c >= 'a' && c <= 'f') return 10 + (c - 'a');
+    if (c >= 'A' && c <= 'F') return 10 + (c - 'A');
+    return -1;
+}
+
+/**
+ * Decodes hex (ignoring ASCII whitespace) into caller-provided buffer.
+ *
+ * Call 1: out == nullptr to query required size; *out_len is set to needed bytes.
+ * Call 2: provide a buffer of at least *out_len bytes; on success, *out_len is set to bytes written.
+ *
+ * Returns:
+ *   SGX_SUCCESS on success
+ *   SGX_ERROR_INVALID_PARAMETER on bad args, non-hex char, or odd number of hex digits
+ *   SGX_ERROR_OUT_OF_MEMORY if out_cap is too small (size query first is recommended)
+ */
+extern "C" sgx_status_t from_hex_enclave(const char* hex,
+                                         size_t hex_len,
+                                         uint8_t* out,
+                                         size_t out_cap,
+                                         size_t* out_len)
+{
+    if (!hex || !out_len) return SGX_ERROR_INVALID_PARAMETER;
+
+    // Pass 1: validate and count hex digits (ignoring whitespace)
+    size_t digits = 0;
+    for (size_t i = 0; i < hex_len; ++i) {
+        char c = hex[i];
+        if (is_space_ascii(c)) continue;
+        if (hex_nibble(c) < 0) return SGX_ERROR_INVALID_PARAMETER; // non-hex
+        ++digits;
+    }
+    if (digits & 1U) return SGX_ERROR_INVALID_PARAMETER; // odd number of hex digits
+    const size_t needed = digits >> 1;
+
+    if (out == nullptr) {
+        *out_len = needed;
+        return SGX_SUCCESS;
+    }
+    if (out_cap < needed) {
+        *out_len = needed; // tell caller how much is needed
+        return SGX_ERROR_OUT_OF_MEMORY;
+    }
+
+    // Pass 2: decode
+    int hi = -1;
+    size_t written = 0;
+    for (size_t i = 0; i < hex_len; ++i) {
+        char c = hex[i];
+        if (is_space_ascii(c)) continue;
+        int v = hex_nibble(c);
+        if (v < 0) return SGX_ERROR_INVALID_PARAMETER; // shouldn’t happen after pass 1
+        if (hi < 0) {
+            hi = v;
+        } else {
+            out[written++] = static_cast<uint8_t>((hi << 4) | v);
+            hi = -1;
+        }
+    }
+    if (hi >= 0) return SGX_ERROR_INVALID_PARAMETER; // shouldn’t happen after pass 1
+    *out_len = written;
+    return SGX_SUCCESS;
+}
+
+sgx_status_t test_libbitcoinkernel()
+{
+    return SGX_SUCCESS;
+}
+
+/**
+ * ECALL: verify one input of a transaction against a provided scriptPubKey+amount.
+ *
+ * Parameters:
+ *   tx_hex/spk_hex       ASCII hex buffers (no 0x). Whitespace is allowed.
+ *   amount               Prevout amount in satoshis (needed for segwit/taproot).
+ *   input_index          Index of the input to verify.
+ *   flags                btck_ScriptVerificationFlags_* bitmask.
+ *   out_ok               [out] 0/1 result from btck_script_pubkey_verify.
+ *   out_status           [out] btck_ScriptVerifyStatus_* enum value.
+ *
+ * Returns:
+ *   SGX_SUCCESS on success; otherwise an SGX error code (invalid params, hex error, parse error).
+ */
+extern "C"
+sgx_status_t ecall_verify_tx_input(const char* tx_hex,
+                                   const char* spk_hex,
+                                   int64_t amount,
+                                   unsigned input_index,
+                                   unsigned flags,
+                                   int* out_ok,
+                                   unsigned* out_status)
+{
+    if (!tx_hex || !spk_hex || !out_ok || !out_status) return SGX_ERROR_INVALID_PARAMETER;
+
+    const size_t tx_hex_len  = strlen(tx_hex);
+    const size_t spk_hex_len = strlen(spk_hex);
+
+    // 1) Hex decode (query sizes first)
+    size_t tx_len = 0, spk_len = 0;
+    sgx_status_t st;
+    st = from_hex_enclave(tx_hex, tx_hex_len, nullptr, 0, &tx_len);
+    if (st != SGX_SUCCESS) return st;
+    st = from_hex_enclave(spk_hex, spk_hex_len, nullptr, 0, &spk_len);
+    if (st != SGX_SUCCESS) return st;
+
+    // Use enclave heap (ok for SGX). If you prefer, use a fixed-size scratch if you know bounds.
+    uint8_t* tx_buf  = (uint8_t*)malloc(tx_len ? tx_len : 1);
+    uint8_t* spk_buf = (uint8_t*)malloc(spk_len ? spk_len : 1);
+    if (!tx_buf || !spk_buf) {
+        free(tx_buf); free(spk_buf);
+        return SGX_ERROR_OUT_OF_MEMORY;
+    }
+    size_t wrote = tx_len;
+    st = from_hex_enclave(tx_hex, tx_hex_len, tx_buf,  tx_len, &wrote);
+    if (st != SGX_SUCCESS || wrote != tx_len) { free(tx_buf); free(spk_buf); return SGX_ERROR_UNEXPECTED; }
+    wrote = spk_len;
+    st = from_hex_enclave(spk_hex, spk_hex_len, spk_buf, spk_len, &wrote);
+    if (st != SGX_SUCCESS || wrote != spk_len) { free(tx_buf); free(spk_buf); return SGX_ERROR_UNEXPECTED; }
+
+    // 2) Build kernel objects
+    btck_Transaction* tx = btck_transaction_create(tx_buf, tx_len);
+    if (!tx) { free(tx_buf); free(spk_buf); return SGX_ERROR_UNEXPECTED; }
+
+    btck_ScriptPubkey* spk = btck_script_pubkey_create(spk_buf, spk_len);
+    if (!spk) {
+        btck_transaction_destroy(tx);
+        free(tx_buf); free(spk_buf);
+        return SGX_ERROR_UNEXPECTED;
+    }
+
+    // Optional: only needed for Taproot in this example
+    btck_TransactionOutput* out = nullptr;
+    const btck_TransactionOutput* out_ptr = nullptr;
+    uint32_t spent_len = 0;
+    if (flags & btck_ScriptVerificationFlags_TAPROOT) {
+        out = btck_transaction_output_create(spk, amount);
+        if (!out) {
+            btck_script_pubkey_destroy(spk);
+            btck_transaction_destroy(tx);
+            free(tx_buf); free(spk_buf);
+            return SGX_ERROR_UNEXPECTED;
+        }
+        out_ptr = out;
+        spent_len = 1u;
+    }
+
+    // 3) Verify
+    btck_ScriptVerifyStatus status = btck_ScriptVerifyStatus_SCRIPT_VERIFY_OK;
+    int ok = btck_script_pubkey_verify(
+        /*script_pubkey=*/spk,
+        /*amount=*/amount,
+        /*tx_to=*/tx,
+        /*spent_outputs=*/out_ptr ? &out_ptr : nullptr,
+        /*spent_outputs_len=*/spent_len,
+        /*input_index=*/input_index,
+        /*flags=*/flags,
+        /*status=*/&status
+    );
+
+    // 4) Cleanup
+    if (out) btck_transaction_output_destroy(out);
+    btck_script_pubkey_destroy(spk);
+    btck_transaction_destroy(tx);
+    free(tx_buf);
+    free(spk_buf);
+
+    // 5) Return results via out-params
+    *out_ok = ok;
+    *out_status = (unsigned)status;
+    return SGX_SUCCESS;
 }
 
 sgx_status_t enclave_seal_data(uint8_t *privkey, size_t privkey_len,

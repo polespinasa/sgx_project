@@ -7,6 +7,9 @@ namespace server_management {
     void start_server() {
         crow::SimpleApp app;
 
+        // check if there is a public key
+
+
         // Define a simple route
         CROW_ROUTE(app, "/")([](){
             return "Hello, Crow!";

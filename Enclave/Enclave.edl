@@ -1,6 +1,13 @@
 enclave {
+    from "sgx_tstdc.edl" import *;
+    // Optional quality-of-life imports:
+    // from "sgx_stdio.edl" import *;
+    // from "sgx_backtrace.edl" import *;
+
     trusted {
         public int trusted_func01(void);
+
+        public sgx_status_t test_libbitcoinkernel(void);
 
         /* Generate new X25519 keypair and return sealed data */
         public sgx_status_t enclave_generate_new_keypair(
@@ -15,6 +22,16 @@ enclave {
             size_t sealed_size,
             [out, size=32] uint8_t *privkey,
             [out, size=32] uint8_t *pubkey
+        );
+
+        public sgx_status_t ecall_verify_tx_input(
+            [in, string] const char* tx_hex,
+            [in, string] const char* spk_hex,
+            int64_t amount,
+            unsigned input_index,
+            unsigned flags,
+            [out] int* out_ok,
+            [out] unsigned* out_status
         );
     };
 

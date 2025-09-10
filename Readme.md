@@ -61,7 +61,7 @@ Typical workflow
 
 ```
 mkdir build && cd build
-cmake -DSGX_MODE=SIM -DSGX_DEBUG=1 ..
+cmake -DSGX_MODE=SIM -DSGX_DEBUG=1 --preset=default ..
 make -j (nproc)                                        # build everything
 ./app                                                  # run the app+enclave
 make clean-all                                         # delete generated artifacts
@@ -71,7 +71,7 @@ or
 
 ```
 mkdir build && cd build
-cmake -DSGX_MODE=SIM -DSGX_DEBUG=1 ..
+cmake -DSGX_MODE=SIM -DSGX_DEBUG=1 --preset=default ..
 cmake --build . --target sgx_build_all -- -j$(nproc)   # build everything (-j (nproc) in fish)
 cmake --build . --target run                           # run the app+enclave
 cmake --build . --target clean-all                     # delete generated artifacts
